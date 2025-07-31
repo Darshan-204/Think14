@@ -8,9 +8,6 @@ This script implements the database refactoring requirements:
 3. Populate the departments table with unique departments
 4. Update the products table to reference departments via foreign key
 5. Update the existing products API to include department information
-
-Author: Assistant
-Date: July 31, 2025
 """
 
 import sqlite3
@@ -177,6 +174,45 @@ class DatabaseRefactor:
         logging.info("ℹ️  Foreign key relationship established via department_id column")
         return True
     
+    def demo_join_query(self):
+        """Demonstrate JOIN query between products and departments."""
+        try:
+            cursor = self.connection.cursor()
+            
+            # Complete JOIN query with all product fields and department info
+            join_query = """
+                SELECT 
+                    p.id,
+                    p.name,
+                    p.brand,
+                    p.category,
+                    p.retail_price,
+                    p.cost,
+                    p.sku,
+                    p.distribution_center_id,
+                    p.created_at,
+                    p.department as original_department,
+                    d.id as department_id,
+                    d.name as department_name,
+                    d.description as department_description
+                FROM products p
+                LEFT JOIN departments d ON p.department_id = d.id
+                LIMIT 5
+            """
+            
+            cursor.execute(join_query)
+            results = cursor.fetchall()
+            
+            print("\n📊 JOIN Query Results (Products with Department Info):")
+            print("-" * 80)
+            for row in results:
+                print(f"Product: {row[1]} | Brand: {row[2]} | Department: {row[11]} ({row[12]})")
+            
+            return results
+        except Exception as e:
+            logging.error(f"❌ JOIN query failed: {e}")
+            return []
+
     def verify_refactoring(self):
         """Verify the database refactoring was successful."""
         try:

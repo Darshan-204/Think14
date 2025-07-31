@@ -396,6 +396,314 @@ def get_product_stats():
         conn.close()
         abort(500)
 
+@app.route('/api/departments', methods=['GET'])
+def get_departments():
+    """
+    GET /api/departments - List all departments
+    
+    Returns all departments with their product counts and basic statistics.
+    """
+    
+    conn = get_db_connection()
+    if not conn:
+        abort(500)
+    
+    try:
+        cursor = conn.cursor()
+        
+        # Get all departments with product counts and statistics
+        cursor.execute("""
+            SELECT 
+                d.id,
+                d.name,
+                d.description,
+                d.created_at,
+                COUNT(p.id) as product_count,
+                AVG(p.retail_price) as avg_price,
+                MIN(p.retail_price) as min_price,
+                MAX(p.retail_price) as max_price
+            FROM departments d
+            LEFT JOIN products p ON d.id = p.department_id
+            GROUP BY d.id, d.name, d.description, d.created_at
+            ORDER BY product_count DESC
+        """)
+        
+        departments = cursor.fetchall()
+        conn.close()
+        
+        # Convert to list of dictionaries
+        departments_list = [dict_from_row(dept) for dept in departments]
+        
+        return jsonify({
+            'departments': departments_list,
+            'total_departments': len(departments_list),
+            'timestamp': datetime.now().isoformat()
+        })
+        
+    except sqlite3.Error as e:
+        logger.error(f"Database error in get_departments: {e}")
+        conn.close()
+        abort(500)
+    except Exception as e:
+        logger.error(f"Error in get_departments: {e}")
+        conn.close()
+        abort(500)
+
+@app.route('/api/departments/<int:department_id>', methods=['GET'])
+def get_department(department_id):
+    """
+    GET /api/departments/{id} - Get specific department details
+    
+    Returns detailed information about a specific department including statistics.
+    """
+    
+    if department_id <= 0:
+        abort(400)
+    
+    conn = get_db_connection()
+    if not conn:
+        abort(500)
+    
+    try:
+        cursor = conn.cursor()
+        
+        # Get department details with statistics
+        cursor.execute("""
+            SELECT 
+                d.id,
+                d.name,
+                d.description,
+                d.created_at,
+                COUNT(p.id) as product_count,
+                AVG(p.retail_price) as avg_price,
+                MIN(p.retail_price) as min_price,
+                MAX(p.retail_price) as max_price,
+                AVG(p.cost) as avg_cost
+            FROM departments d
+            LEFT JOIN products p ON d.id = p.department_id
+            WHERE d.id = ?
+            GROUP BY d.id, d.name, d.description, d.created_at
+        """, (department_id,))
+        
+        department = cursor.fetchone()
+        
+        if department is None:
+            conn.close()
+            return jsonify({
+                'error': 'Department not found',
+                'message': f'Department with ID {department_id} does not exist',
+                'department_id': department_id
+            }), 404
+        
+        # Get top categories in this department
+        cursor.execute("""
+            SELECT category, COUNT(*) as count, AVG(retail_price) as avg_price
+            FROM products p
+            JOIN departments d ON p.department_id = d.id
+            WHERE d.id = ?
+            GROUP BY category
+            ORDER BY count DESC
+            LIMIT 5
+        """, (department_id,))
+        
+        top_categories = [dict_from_row(row) for row in cursor.fetchall()]
+        
+        # Get top brands in this department
+        cursor.execute("""
+            SELECT brand, COUNT(*) as count, AVG(retail_price) as avg_price
+            FROM products p
+            JOIN departments d ON p.department_id = d.id
+            WHERE d.id = ?
+            GROUP BY brand
+            ORDER BY count DESC
+            LIMIT 5
+        """, (department_id,))
+        
+        top_brands = [dict_from_row(row) for row in cursor.fetchall()]
+        
+        conn.close()
+        
+        # Build response
+        department_data = dict_from_row(department)
+        department_data['top_categories'] = top_categories
+        department_data['top_brands'] = top_brands
+        
+        return jsonify({
+            'department': department_data,
+            'timestamp': datetime.now().isoformat()
+        })
+        
+    except sqlite3.Error as e:
+        logger.error(f"Database error in get_department: {e}")
+        conn.close()
+        abort(500)
+    except Exception as e:
+        logger.error(f"Error in get_department: {e}")
+        conn.close()
+        abort(500)
+
+@app.route('/api/departments/<int:department_id>/products', methods=['GET'])
+def get_department_products(department_id):
+    """
+    GET /api/departments/{id}/products - Get all products in a department
+    
+    Query Parameters:
+    - page: Page number (default: 1)
+    - limit: Items per page (default: 20, max: 100)
+    - category: Filter by category within the department
+    - brand: Filter by brand within the department
+    - min_price: Minimum retail price
+    - max_price: Maximum retail price
+    - search: Search in product name
+    - sort_by: Sort by field (name, price, cost, brand)
+    - sort_order: Sort order (asc, desc)
+    """
+    
+    if department_id <= 0:
+        abort(400)
+    
+    # Get query parameters
+    page = request.args.get('page', 1, type=int)
+    limit = min(request.args.get('limit', 20, type=int), 100)
+    category = request.args.get('category')
+    brand = request.args.get('brand')
+    min_price = request.args.get('min_price', type=float)
+    max_price = request.args.get('max_price', type=float)
+    search = request.args.get('search')
+    sort_by = request.args.get('sort_by', 'id')
+    sort_order = request.args.get('sort_order', 'asc')
+    
+    # Validate parameters
+    if page < 1:
+        abort(400)
+    
+    valid_sort_fields = ['id', 'name', 'retail_price', 'cost', 'brand', 'category']
+    if sort_by not in valid_sort_fields:
+        sort_by = 'id'
+    
+    if sort_order not in ['asc', 'desc']:
+        sort_order = 'asc'
+    
+    conn = get_db_connection()
+    if not conn:
+        abort(500)
+    
+    try:
+        cursor = conn.cursor()
+        
+        # First, verify department exists
+        cursor.execute("SELECT name FROM departments WHERE id = ?", (department_id,))
+        dept_result = cursor.fetchone()
+        
+        if dept_result is None:
+            conn.close()
+            return jsonify({
+                'error': 'Department not found',
+                'message': f'Department with ID {department_id} does not exist',
+                'department_id': department_id
+            }), 404
+        
+        department_name = dept_result[0]
+        
+        # Build the query with department filter
+        where_conditions = ["p.department_id = ?"]
+        params = [department_id]
+        
+        if category:
+            where_conditions.append("p.category = ?")
+            params.append(category)
+        
+        if brand:
+            where_conditions.append("p.brand = ?")
+            params.append(brand)
+        
+        if min_price is not None:
+            where_conditions.append("p.retail_price >= ?")
+            params.append(min_price)
+        
+        if max_price is not None:
+            where_conditions.append("p.retail_price <= ?")
+            params.append(max_price)
+        
+        if search:
+            where_conditions.append("p.name LIKE ?")
+            params.append(f"%{search}%")
+        
+        where_clause = "WHERE " + " AND ".join(where_conditions)
+        
+        # Count total records for pagination
+        count_query = f"""
+            SELECT COUNT(*) 
+            FROM products p
+            JOIN departments d ON p.department_id = d.id
+            {where_clause}
+        """
+        cursor.execute(count_query, params)
+        total_count = cursor.fetchone()[0]
+        
+        # Calculate pagination info
+        total_pages = math.ceil(total_count / limit)
+        offset = (page - 1) * limit
+        
+        # Build main query
+        query = f"""
+            SELECT p.id, p.cost, p.category, p.name, p.brand, p.retail_price, 
+                   p.department, p.sku, p.distribution_center_id, p.created_at,
+                   d.name as department_name, d.description as department_description
+            FROM products p
+            JOIN departments d ON p.department_id = d.id
+            {where_clause}
+            ORDER BY p.{sort_by} {sort_order.upper()}
+            LIMIT ? OFFSET ?
+        """
+        
+        params.extend([limit, offset])
+        cursor.execute(query, params)
+        products = cursor.fetchall()
+        
+        # Convert to list of dictionaries
+        products_list = [dict_from_row(product) for product in products]
+        
+        conn.close()
+        
+        # Build response
+        response = {
+            'department_id': department_id,
+            'department_name': department_name,
+            'products': products_list,
+            'pagination': {
+                'page': page,
+                'limit': limit,
+                'total_count': total_count,
+                'total_pages': total_pages,
+                'has_next': page < total_pages,
+                'has_prev': page > 1,
+                'next_page': page + 1 if page < total_pages else None,
+                'prev_page': page - 1 if page > 1 else None
+            },
+            'filters': {
+                'category': category,
+                'brand': brand,
+                'min_price': min_price,
+                'max_price': max_price,
+                'search': search,
+                'sort_by': sort_by,
+                'sort_order': sort_order
+            },
+            'timestamp': datetime.now().isoformat()
+        }
+        
+        return jsonify(response)
+        
+    except sqlite3.Error as e:
+        logger.error(f"Database error in get_department_products: {e}")
+        conn.close()
+        abort(500)
+    except Exception as e:
+        logger.error(f"Error in get_department_products: {e}")
+        conn.close()
+        abort(500)
+
 if __name__ == '__main__':
     print("=" * 60)
     print("           PRODUCTS REST API")
