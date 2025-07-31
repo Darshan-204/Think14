@@ -193,7 +193,12 @@ def get_products():
             where_clause = "WHERE " + " AND ".join(where_conditions)
         
         # Count total records for pagination
-        count_query = f"SELECT COUNT(*) FROM products {where_clause}"
+        count_query = f"""
+            SELECT COUNT(*) 
+            FROM products p
+            LEFT JOIN departments d ON p.department_id = d.id
+            {where_clause}
+        """
         cursor.execute(count_query, params)
         total_count = cursor.fetchone()[0]
         
@@ -201,13 +206,15 @@ def get_products():
         total_pages = math.ceil(total_count / limit)
         offset = (page - 1) * limit
         
-        # Build main query with sorting and pagination
+        # Build main query with sorting, pagination, and department join
         query = f"""
-            SELECT id, cost, category, name, brand, retail_price, 
-                   department, sku, distribution_center_id, created_at
-            FROM products 
+            SELECT p.id, p.cost, p.category, p.name, p.brand, p.retail_price, 
+                   p.department, p.sku, p.distribution_center_id, p.created_at,
+                   d.name as department_name, d.description as department_description
+            FROM products p
+            LEFT JOIN departments d ON p.department_id = d.id
             {where_clause}
-            ORDER BY {sort_by} {sort_order.upper()}
+            ORDER BY p.{sort_by} {sort_order.upper()}
             LIMIT ? OFFSET ?
         """
         
@@ -271,10 +278,12 @@ def get_product(product_id):
     try:
         cursor = conn.cursor()
         cursor.execute("""
-            SELECT id, cost, category, name, brand, retail_price, 
-                   department, sku, distribution_center_id, created_at
-            FROM products 
-            WHERE id = ?
+            SELECT p.id, p.cost, p.category, p.name, p.brand, p.retail_price, 
+                   p.department, p.sku, p.distribution_center_id, p.created_at,
+                   d.name as department_name, d.description as department_description
+            FROM products p
+            LEFT JOIN departments d ON p.department_id = d.id
+            WHERE p.id = ?
         """, (product_id,))
         
         product = cursor.fetchone()
@@ -329,9 +338,12 @@ def get_product_stats():
         
         # Department statistics
         cursor.execute("""
-            SELECT department, COUNT(*) as count, AVG(retail_price) as avg_price
-            FROM products 
-            GROUP BY department
+            SELECT d.name as department, d.description, 
+                   COUNT(p.id) as count, AVG(p.retail_price) as avg_price
+            FROM departments d
+            LEFT JOIN products p ON d.id = p.department_id
+            GROUP BY d.id, d.name, d.description
+            ORDER BY count DESC
         """)
         dept_stats = [dict_from_row(row) for row in cursor.fetchall()]
         
