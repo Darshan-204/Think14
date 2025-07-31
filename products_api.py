@@ -5,6 +5,7 @@ A Flask-based REST API that provides endpoints for accessing product data from t
 """
 
 from flask import Flask, jsonify, request, abort
+from flask_cors import CORS
 import sqlite3
 import math
 from datetime import datetime
@@ -16,6 +17,9 @@ logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
 app.config['JSON_SORT_KEYS'] = False
+
+# Enable CORS for all domains on all routes
+CORS(app)
 
 # Database configuration
 DATABASE = 'ecommerce.db'
