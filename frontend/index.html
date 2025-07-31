@@ -170,6 +170,93 @@
             margin: 20px 0;
         }
 
+        .department-card {
+            border: none;
+            border-radius: 15px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+            transition: all 0.3s ease;
+            overflow: hidden;
+            margin-bottom: 20px;
+            cursor: pointer;
+        }
+
+        .department-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 8px 25px rgba(0,0,0,0.15);
+        }
+
+        .department-header {
+            background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+            color: white;
+            padding: 20px;
+            text-align: center;
+        }
+
+        .department-icon {
+            font-size: 3rem;
+            margin-bottom: 10px;
+        }
+
+        .department-stats {
+            display: flex;
+            justify-content: space-around;
+            padding: 15px;
+            background-color: #f8f9fa;
+        }
+
+        .stat-item {
+            text-align: center;
+        }
+
+        .stat-number {
+            font-size: 1.5rem;
+            font-weight: bold;
+            color: var(--secondary-color);
+        }
+
+        .stat-label {
+            font-size: 0.9rem;
+            color: #666;
+        }
+
+        .breadcrumb-custom {
+            background-color: white;
+            border-radius: 10px;
+            padding: 15px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+        }
+
+        .department-page-header {
+            background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+            color: white;
+            border-radius: 15px;
+            padding: 30px;
+            margin-bottom: 30px;
+            text-align: center;
+        }
+
+        .category-filter-pills {
+            margin-bottom: 20px;
+        }
+
+        .filter-pill {
+            display: inline-block;
+            background-color: var(--light-color);
+            color: var(--dark-color);
+            padding: 8px 16px;
+            margin: 4px;
+            border-radius: 20px;
+            text-decoration: none;
+            transition: all 0.3s ease;
+        }
+
+        .filter-pill:hover, .filter-pill.active {
+            background-color: var(--secondary-color);
+            color: white;
+            text-decoration: none;
+        }
+
         @media (max-width: 768px) {
             .product-card {
                 margin-bottom: 15px;
@@ -177,6 +264,11 @@
             
             .search-filters {
                 padding: 15px;
+            }
+
+            .department-stats {
+                flex-direction: column;
+                gap: 10px;
             }
         }
     </style>
@@ -195,8 +287,20 @@
                 <ul class="navbar-nav ms-auto">
                     <li class="nav-item">
                         <a class="nav-link" href="#" onclick="showProductList()">
-                            <i class="fas fa-list"></i> Products
+                            <i class="fas fa-list"></i> All Products
                         </a>
+                    </li>
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle" href="#" id="departmentsDropdown" role="button" data-bs-toggle="dropdown">
+                            <i class="fas fa-tags"></i> Departments
+                        </a>
+                        <ul class="dropdown-menu" id="departmentsList">
+                            <li><a class="dropdown-item" href="#" onclick="showDepartmentList()">
+                                <i class="fas fa-th-large"></i> All Departments
+                            </a></li>
+                            <li><hr class="dropdown-divider"></li>
+                            <!-- Department items will be loaded dynamically -->
+                        </ul>
                     </li>
                     <li class="nav-item">
                         <a class="nav-link" href="#" onclick="showStats()">
@@ -295,6 +399,131 @@
                     </div>
                 </div>
             </div>
+        </div>
+
+        <!-- Department List View -->
+        <div id="departmentListView" style="display: none;">
+            <div class="row">
+                <div class="col-12">
+                    <h2 class="mb-4">
+                        <i class="fas fa-tags"></i> All Departments
+                    </h2>
+                </div>
+            </div>
+            
+            <div id="departmentsContainer">
+                <!-- Departments will be loaded here -->
+            </div>
+        </div>
+
+        <!-- Department Page View -->
+        <div id="departmentPageView" style="display: none;">
+            <!-- Breadcrumb -->
+            <nav class="breadcrumb-custom">
+                <ol class="breadcrumb mb-0">
+                    <li class="breadcrumb-item">
+                        <a href="#" onclick="showProductList()">
+                            <i class="fas fa-home"></i> Home
+                        </a>
+                    </li>
+                    <li class="breadcrumb-item">
+                        <a href="#" onclick="showDepartmentList()">Departments</a>
+                    </li>
+                    <li class="breadcrumb-item active" id="currentDepartmentBreadcrumb">
+                        <!-- Current department name -->
+                    </li>
+                </ol>
+            </nav>
+
+            <!-- Department Header -->
+            <div class="department-page-header">
+                <div class="row align-items-center">
+                    <div class="col-md-8">
+                        <h1 id="departmentPageTitle">
+                            <i class="fas fa-tag"></i> Department
+                        </h1>
+                        <p id="departmentPageDescription" class="mb-0">
+                            <!-- Department description -->
+                        </p>
+                    </div>
+                    <div class="col-md-4 text-end">
+                        <div class="row">
+                            <div class="col-6">
+                                <div class="text-center">
+                                    <div class="stats-number" id="departmentProductCount">0</div>
+                                    <div class="stat-label">Products</div>
+                                </div>
+                            </div>
+                            <div class="col-6">
+                                <div class="text-center">
+                                    <div class="stats-number" id="departmentAvgPrice">$0</div>
+                                    <div class="stat-label">Avg Price</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Category Filter Pills -->
+            <div class="category-filter-pills">
+                <h5>Filter by Category:</h5>
+                <div id="categoryPills">
+                    <!-- Category pills will be loaded here -->
+                </div>
+            </div>
+
+            <!-- Department Search and Filter Section -->
+            <div class="search-filters">
+                <div class="row">
+                    <div class="col-md-3 mb-3">
+                        <label for="deptSearchInput" class="form-label">Search Products</label>
+                        <input type="text" class="form-control" id="deptSearchInput" placeholder="Search by name...">
+                    </div>
+                    <div class="col-md-2 mb-3">
+                        <label for="deptBrandFilter" class="form-label">Brand</label>
+                        <select class="form-select" id="deptBrandFilter">
+                            <option value="">All Brands</option>
+                        </select>
+                    </div>
+                    <div class="col-md-2 mb-3">
+                        <label for="deptMinPrice" class="form-label">Min Price</label>
+                        <input type="number" class="form-control" id="deptMinPrice" placeholder="0">
+                    </div>
+                    <div class="col-md-2 mb-3">
+                        <label for="deptMaxPrice" class="form-label">Max Price</label>
+                        <input type="number" class="form-control" id="deptMaxPrice" placeholder="1000">
+                    </div>
+                    <div class="col-md-2 mb-3">
+                        <label for="deptSortBy" class="form-label">Sort By</label>
+                        <select class="form-select" id="deptSortBy">
+                            <option value="id">ID</option>
+                            <option value="name">Name</option>
+                            <option value="retail_price">Price</option>
+                            <option value="brand">Brand</option>
+                        </select>
+                    </div>
+                    <div class="col-md-1 mb-3">
+                        <label for="deptSortOrder" class="form-label">Order</label>
+                        <select class="form-select" id="deptSortOrder">
+                            <option value="asc">↑</option>
+                            <option value="desc">↓</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Department Products Container -->
+            <div id="departmentProductsContainer">
+                <!-- Department products will be loaded here -->
+            </div>
+
+            <!-- Department Pagination -->
+            <nav id="departmentPaginationNav">
+                <ul class="pagination" id="departmentPagination">
+                    <!-- Pagination will be generated here -->
+                </ul>
+            </nav>
         </div>
     </div>
 

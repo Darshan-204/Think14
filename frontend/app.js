@@ -7,9 +7,15 @@ let currentPage = 1;
 let totalPages = 1;
 let currentFilters = {};
 let allCategories = [];
+let allDepartments = [];
+let currentDepartment = null;
+let currentDepartmentPage = 1;
+let departmentTotalPages = 1;
+let currentDepartmentCategory = '';
 
 // Initialize the application
 document.addEventListener('DOMContentLoaded', function() {
+    loadDepartments();
     loadCategories();
     loadProducts(1);
     setupEventListeners();
@@ -41,6 +47,50 @@ function setupEventListeners() {
             }
         });
     });
+
+    // Department page event listeners
+    setupDepartmentEventListeners();
+}
+
+// Setup department-specific event listeners
+function setupDepartmentEventListeners() {
+    // Department search input with debounce
+    let deptSearchTimeout;
+    const deptSearchInput = document.getElementById('deptSearchInput');
+    if (deptSearchInput) {
+        deptSearchInput.addEventListener('input', function() {
+            clearTimeout(deptSearchTimeout);
+            deptSearchTimeout = setTimeout(() => {
+                if (currentDepartment) {
+                    loadDepartmentProducts(currentDepartment.id, 1);
+                }
+            }, 500);
+        });
+    }
+
+    // Department filter change events
+    ['deptBrandFilter', 'deptSortBy', 'deptSortOrder', 'deptMinPrice', 'deptMaxPrice'].forEach(id => {
+        const element = document.getElementById(id);
+        if (element) {
+            element.addEventListener('change', () => {
+                if (currentDepartment) {
+                    loadDepartmentProducts(currentDepartment.id, 1);
+                }
+            });
+        }
+    });
+
+    // Enter key on department price inputs
+    ['deptMinPrice', 'deptMaxPrice'].forEach(id => {
+        const element = document.getElementById(id);
+        if (element) {
+            element.addEventListener('keypress', function(e) {
+                if (e.key === 'Enter' && currentDepartment) {
+                    loadDepartmentProducts(currentDepartment.id, 1);
+                }
+            });
+        }
+    });
 }
 
 // Load categories for filter dropdown
@@ -56,6 +106,44 @@ async function loadCategories() {
     } catch (error) {
         console.error('Error loading categories:', error);
     }
+}
+
+// Load departments
+async function loadDepartments() {
+    try {
+        const response = await fetch(`${API_BASE_URL}/api/departments`);
+        const data = await response.json();
+        
+        if (response.ok && data.departments) {
+            allDepartments = data.departments;
+            populateDepartmentNavigation();
+        }
+    } catch (error) {
+        console.error('Error loading departments:', error);
+    }
+}
+
+// Populate department navigation dropdown
+function populateDepartmentNavigation() {
+    const departmentsList = document.getElementById('departmentsList');
+    
+    // Keep the "All Departments" item and divider
+    const existingItems = departmentsList.innerHTML;
+    
+    // Add department items
+    allDepartments.forEach(department => {
+        const listItem = document.createElement('li');
+        const icon = department.name === 'Men' ? 'fas fa-male' : 'fas fa-female';
+        
+        listItem.innerHTML = `
+            <a class="dropdown-item" href="#" onclick="showDepartmentPage(${department.id})">
+                <i class="${icon}"></i> ${department.name} 
+                <span class="badge bg-secondary ms-2">${department.product_count}</span>
+            </a>
+        `;
+        
+        departmentsList.appendChild(listItem);
+    });
 }
 
 // Populate category filter dropdown
@@ -336,9 +424,349 @@ function updatePagination(pagination) {
     paginationContainer.innerHTML = paginationHTML;
 }
 
+// View switching functions
+function showProductList() {
+    hideAllViews();
+    document.getElementById('productListView').style.display = 'block';
+    loadProducts(1);
+}
+
+function showDepartmentList() {
+    hideAllViews();
+    document.getElementById('departmentListView').style.display = 'block';
+    loadDepartmentList();
+}
+
+function showDepartmentPage(departmentId) {
+    hideAllViews();
+    document.getElementById('departmentPageView').style.display = 'block';
+    loadDepartmentDetails(departmentId);
+}
+
+function hideAllViews() {
+    document.getElementById('productListView').style.display = 'none';
+    document.getElementById('departmentListView').style.display = 'none';
+    document.getElementById('departmentPageView').style.display = 'none';
+    document.getElementById('statsView').style.display = 'none';
+}
+
+// Load and display department list
+async function loadDepartmentList() {
+    showLoading('departmentsContainer');
+    
+    try {
+        const response = await fetch(`${API_BASE_URL}/api/departments`);
+        const data = await response.json();
+        
+        if (response.ok) {
+            displayDepartments(data.departments);
+        } else {
+            showError('Failed to load departments: ' + data.message);
+        }
+    } catch (error) {
+        console.error('Error loading departments:', error);
+        showError('Failed to load departments.');
+    }
+}
+
+// Display departments
+function displayDepartments(departments) {
+    const container = document.getElementById('departmentsContainer');
+    
+    if (departments.length === 0) {
+        container.innerHTML = '<div class="text-center py-5"><h4>No departments found</h4></div>';
+        return;
+    }
+    
+    let departmentsHTML = '<div class="row">';
+    
+    departments.forEach(department => {
+        const icon = department.name === 'Men' ? 'fas fa-male' : 'fas fa-female';
+        
+        departmentsHTML += `
+            <div class="col-md-6 col-lg-4 mb-4">
+                <div class="department-card" onclick="showDepartmentPage(${department.id})">
+                    <div class="department-header">
+                        <div class="department-icon">
+                            <i class="${icon}"></i>
+                        </div>
+                        <h4>${department.name}</h4>
+                        <p class="mb-0">${department.description}</p>
+                    </div>
+                    <div class="department-stats">
+                        <div class="stat-item">
+                            <div class="stat-number">${department.product_count.toLocaleString()}</div>
+                            <div class="stat-label">Products</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-number">$${department.avg_price.toFixed(2)}</div>
+                            <div class="stat-label">Avg Price</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-number">$${department.min_price.toFixed(2)}</div>
+                            <div class="stat-label">Min Price</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-number">$${department.max_price.toFixed(2)}</div>
+                            <div class="stat-label">Max Price</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+    });
+    
+    departmentsHTML += '</div>';
+    container.innerHTML = departmentsHTML;
+}
+
+// Load department details and products
+async function loadDepartmentDetails(departmentId) {
+    try {
+        // Load department details
+        const deptResponse = await fetch(`${API_BASE_URL}/api/departments/${departmentId}`);
+        const deptData = await deptResponse.json();
+        
+        if (deptResponse.ok) {
+            currentDepartment = deptData.department;
+            displayDepartmentHeader(currentDepartment);
+            setupDepartmentCategoryFilter(currentDepartment);
+            loadDepartmentProducts(departmentId, 1);
+        } else {
+            showError('Department not found: ' + deptData.message);
+        }
+    } catch (error) {
+        console.error('Error loading department details:', error);
+        showError('Failed to load department details.');
+    }
+}
+
+// Display department header
+function displayDepartmentHeader(department) {
+    const icon = department.name === 'Men' ? 'fas fa-male' : 'fas fa-female';
+    
+    document.getElementById('departmentPageTitle').innerHTML = `
+        <i class="${icon}"></i> ${department.name}
+    `;
+    document.getElementById('departmentPageDescription').textContent = department.description;
+    document.getElementById('currentDepartmentBreadcrumb').textContent = department.name;
+    document.getElementById('departmentProductCount').textContent = department.product_count.toLocaleString();
+    document.getElementById('departmentAvgPrice').textContent = `$${department.avg_price.toFixed(2)}`;
+}
+
+// Setup category filter pills for department
+function setupDepartmentCategoryFilter(department) {
+    const categoryPills = document.getElementById('categoryPills');
+    
+    let pillsHTML = `
+        <a href="#" class="filter-pill active" onclick="filterDepartmentByCategory('')">
+            All Categories (${department.product_count})
+        </a>
+    `;
+    
+    department.top_categories.forEach(category => {
+        pillsHTML += `
+            <a href="#" class="filter-pill" onclick="filterDepartmentByCategory('${category.category}')">
+                ${category.category} (${category.count})
+            </a>
+        `;
+    });
+    
+    categoryPills.innerHTML = pillsHTML;
+}
+
+// Filter department by category
+function filterDepartmentByCategory(category) {
+    // Update active pill
+    document.querySelectorAll('.filter-pill').forEach(pill => {
+        pill.classList.remove('active');
+    });
+    event.target.classList.add('active');
+    
+    // Set category filter and reload products
+    if (currentDepartment) {
+        // Update the category filter (we'll add this as a hidden input or data attribute)
+        currentDepartmentCategory = category;
+        loadDepartmentProducts(currentDepartment.id, 1);
+    }
+}
+
+// Load department products
+async function loadDepartmentProducts(departmentId, page = 1) {
+    showLoading('departmentProductsContainer');
+    
+    try {
+        const filters = getDepartmentFilters();
+        const queryParams = new URLSearchParams({
+            page: page,
+            limit: 12,
+            ...filters
+        });
+
+        const response = await fetch(`${API_BASE_URL}/api/departments/${departmentId}/products?${queryParams}`);
+        const data = await response.json();
+
+        if (response.ok) {
+            currentDepartmentPage = page;
+            departmentTotalPages = data.pagination.total_pages;
+            
+            displayDepartmentProducts(data.products);
+            updateDepartmentPagination(data.pagination);
+        } else {
+            showError('Failed to load department products: ' + data.message);
+        }
+    } catch (error) {
+        console.error('Error loading department products:', error);
+        showError('Failed to load department products.');
+    }
+}
+
+// Get department filters
+function getDepartmentFilters() {
+    const filters = {};
+    
+    const search = document.getElementById('deptSearchInput')?.value?.trim();
+    const brand = document.getElementById('deptBrandFilter')?.value;
+    const minPrice = document.getElementById('deptMinPrice')?.value;
+    const maxPrice = document.getElementById('deptMaxPrice')?.value;
+    const sortBy = document.getElementById('deptSortBy')?.value || 'id';
+    const sortOrder = document.getElementById('deptSortOrder')?.value || 'asc';
+    
+    if (search) filters.search = search;
+    if (brand) filters.brand = brand;
+    if (minPrice) filters.min_price = minPrice;
+    if (maxPrice) filters.max_price = maxPrice;
+    if (currentDepartmentCategory) filters.category = currentDepartmentCategory;
+    
+    filters.sort_by = sortBy;
+    filters.sort_order = sortOrder;
+    
+    return filters;
+}
+
+// Display department products
+function displayDepartmentProducts(products) {
+    const container = document.getElementById('departmentProductsContainer');
+    
+    if (products.length === 0) {
+        container.innerHTML = '<div class="text-center py-5"><h4>No products found</h4></div>';
+        return;
+    }
+    
+    let productsHTML = '<div class="row">';
+    
+    products.forEach(product => {
+        productsHTML += `
+            <div class="col-lg-4 col-md-6 mb-4">
+                <div class="product-card">
+                    <div class="product-image-placeholder">
+                        <i class="fas fa-image"></i>
+                    </div>
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-start mb-2">
+                            <span class="product-category">${product.category}</span>
+                            <span class="product-department">${product.department_name}</span>
+                        </div>
+                        <h6 class="card-title">${truncateText(product.name, 60)}</h6>
+                        <p class="text-muted mb-2">
+                            <i class="fas fa-tag"></i> ${product.brand}
+                        </p>
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <span class="product-price">$${product.retail_price}</span>
+                                <br>
+                                <small class="product-cost">Cost: $${product.cost}</small>
+                            </div>
+                            <button class="btn btn-primary btn-sm" onclick="showProductDetail(${product.id})">
+                                <i class="fas fa-eye"></i> View
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+    });
+    
+    productsHTML += '</div>';
+    container.innerHTML = productsHTML;
+}
+
+// Update department pagination
+function updateDepartmentPagination(pagination) {
+    const paginationContainer = document.getElementById('departmentPagination');
+    
+    if (pagination.total_pages <= 1) {
+        document.getElementById('departmentPaginationNav').style.display = 'none';
+        return;
+    }
+    
+    document.getElementById('departmentPaginationNav').style.display = 'block';
+    
+    let paginationHTML = '';
+    
+    // Previous button
+    if (pagination.has_prev) {
+        paginationHTML += `
+            <li class="page-item">
+                <a class="page-link" href="#" onclick="loadDepartmentProducts(${currentDepartment.id}, ${pagination.prev_page})">
+                    <i class="fas fa-chevron-left"></i> Previous
+                </a>
+            </li>
+        `;
+    }
+    
+    // Page numbers
+    const startPage = Math.max(1, pagination.page - 2);
+    const endPage = Math.min(pagination.total_pages, pagination.page + 2);
+    
+    if (startPage > 1) {
+        paginationHTML += `
+            <li class="page-item">
+                <a class="page-link" href="#" onclick="loadDepartmentProducts(${currentDepartment.id}, 1)">1</a>
+            </li>
+        `;
+        if (startPage > 2) {
+            paginationHTML += '<li class="page-item disabled"><span class="page-link">...</span></li>';
+        }
+    }
+    
+    for (let i = startPage; i <= endPage; i++) {
+        const activeClass = i === pagination.page ? 'active' : '';
+        paginationHTML += `
+            <li class="page-item ${activeClass}">
+                <a class="page-link" href="#" onclick="loadDepartmentProducts(${currentDepartment.id}, ${i})">${i}</a>
+            </li>
+        `;
+    }
+    
+    if (endPage < pagination.total_pages) {
+        if (endPage < pagination.total_pages - 1) {
+            paginationHTML += '<li class="page-item disabled"><span class="page-link">...</span></li>';
+        }
+        paginationHTML += `
+            <li class="page-item">
+                <a class="page-link" href="#" onclick="loadDepartmentProducts(${currentDepartment.id}, ${pagination.total_pages})">${pagination.total_pages}</a>
+            </li>
+        `;
+    }
+    
+    // Next button
+    if (pagination.has_next) {
+        paginationHTML += `
+            <li class="page-item">
+                <a class="page-link" href="#" onclick="loadDepartmentProducts(${currentDepartment.id}, ${pagination.next_page})">
+                    Next <i class="fas fa-chevron-right"></i>
+                </a>
+            </li>
+        `;
+    }
+    
+    paginationContainer.innerHTML = paginationHTML;
+}
+
 // Show statistics view
 async function showStats() {
-    document.getElementById('productListView').style.display = 'none';
+    hideAllViews();
     document.getElementById('statsView').style.display = 'block';
     
     showLoading('statsContainer');
@@ -449,12 +877,6 @@ function displayStats(stats) {
     `;
     
     document.getElementById('statsContainer').innerHTML = statsHTML;
-}
-
-// Show product list view
-function showProductList() {
-    document.getElementById('statsView').style.display = 'none';
-    document.getElementById('productListView').style.display = 'block';
 }
 
 // Utility functions
